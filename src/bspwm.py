@@ -37,6 +37,7 @@ class BSPWM(object):
 
         self.__calendar = None
         self.__volume = None
+        self.__vpn = None
         self.__state = None
 
         # Status toggles
@@ -88,7 +89,6 @@ class BSPWM(object):
                 if ws.startswith('SYS'):
                     stats = ws.split(' °')[1:]
                     status = self.generate_status(stats)
-
                     # Write into stdin of lemonbar
                     self.write_into_lemonbar(line + status)
                     continue
@@ -111,6 +111,9 @@ class BSPWM(object):
                             self.__calendar = None
                     elif ws.startswith('ws'): # Open workspace, which is clicked
                         s = subprocess.call(['bspc', 'desktop', '-f', ws[2]])
+                    elif ws.startswith('vpn'): # Show VPN in notification
+                        notification = Notify.Notification.new("VPN", "Activated: {0}".format(self.__vpn), "dialog-information")
+                        notification.show()
 
                     # Update the status, if to toggle single stats
                     status = self.generate_status(self.__state)
@@ -222,6 +225,13 @@ class BSPWM(object):
                         status += ' %{F' + self.__colors['status_icon_fg'] + '}%{A:CMDeth:}%{A}%{F' + self.__colors['status_fg'] + '} '
                     else: # Eth connected
                         status += ' %{F' + self.__colors['status_icon_fg_muted'] + '}%{A:CMDeth:}%{A}%{F' + self.__colors['status_fg'] + '} '
+            # VPN
+            elif s.startswith('VPN'):
+                self.__vpn = s.lstrip('VPN')
+                if s.startswith('VPNyes'):
+                    status += ' %{F' + self.__colors['status_icon_fg'] + '}%{A:CMDvpn:}%{A}%{F' + self.__colors['status_fg'] + '} '
+                else:
+                    status += ' %{F' + self.__colors['status_icon_fg_muted'] + '}%{A:CMDvpn:}%{A}%{F' + self.__colors['status_fg'] + '} '
             # Battery
             elif s.startswith('BATT'):
                 s = s[4:]
