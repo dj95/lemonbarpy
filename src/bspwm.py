@@ -236,8 +236,9 @@ class BSPWM(object):
             elif s.startswith('BATT'):
                 s = s[4:]
                 # If battery is not charging
+                print(s)
                 if self.__show_battery: # Display battery stats
-                    if s.startswith('BAT') or s.startswith('UNK') or s.startswith('FULL'):
+                    if s.startswith('BAT') or s.startswith('UNK') or s.startswith('FLL'):
                         percent = int(s.split(' ')[1].split(',')[0])
                         s = s.lstrip('BAT ')
                         s = s.lstrip('UNK ')
@@ -255,7 +256,7 @@ class BSPWM(object):
                         s = s.lstrip('CHR ')
                         status += ' %{F' + self.__colors['status_icon_fg'] + '}%{A:CMDbat:}%{F' + self.__colors['status_fg'] + '} ' + s + '%{A}  '
                 else: # Hide battery stats
-                    if s.startswith('BAT') or s.startswith('UNK') or s.startswith('FULL'):
+                    if s.startswith('BAT') or s.startswith('UNK') or s.startswith('FLL'):
                         percent = int(s.split(' ')[1].split(',')[0])
                         s = s.lstrip('BAT ')
                         s = s.lstrip('UNK ')
