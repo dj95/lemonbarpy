@@ -26,6 +26,11 @@ Easy to use lemonbar parser.
 - libnotify
 - python-gobject
 - BSPWM(>= 0.9.1)
+- Fonts:
+  - Ionicons
+  - Serif
+  - Terminesspowerline
+  - Icons
 
 
 ### Installation

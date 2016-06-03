@@ -30,7 +30,7 @@ class BSPWM(object):
         self.__colors = colors
 
         # Start lemonbar in a subprocess
-        self.__bar = subprocess.Popen(['lemonbar', '-B', colors['bg'], '-F', colors['fg'], '-f', "Terminesspowerline-8", '-f', "Ionicons-10", '-f', "Typeface-8", '-f', 'Icons-8', '-f', "Serif-9", '-a', '30' ], stdin=subprocess.PIPE, stdout=subprocess.PIPE)
+        self.__bar = subprocess.Popen(['lemonbar', '-B', colors['bg'], '-F', colors['fg'], '-f', "Terminesspowerline-8", '-f', "Ionicons-10", '-f', 'Icons-8', '-f', "Serif-9", '-a', '30' ], stdin=subprocess.PIPE, stdout=subprocess.PIPE)
 
         # Init notifier for displaying volume stats with dunst
         Notify.init('bar')
@@ -105,7 +105,7 @@ class BSPWM(object):
                         self.__show_eth = not self.__show_eth
                     elif ws.startswith('date'):
                         if self.__calendar is None:
-                            self.__calendar = subprocess.Popen(['gsimplecal'])
+                            self.__calendar = subprocess.Popen(['/home/neo/.dotfiles/cal.sh'])
                         else:
                             self.__calendar.terminate()
                             self.__calendar = None
@@ -250,7 +250,7 @@ class BSPWM(object):
                         elif percent <= 50 and percent > 30:
                             status += ' %{F' + self.__colors['status_icon_fg'] + '}%{A:CMDbat:}%{F' + self.__colors['status_fg'] + '} ' + s + '%{A}  '
                         elif percent <= 30:
-                            status += ' %{F' + self.__colors['status_alarm_fg'] + '}%{A:CMDbat:}%{F' + self.__colors['status_alarm_fg'] + '} ' + s + '%{A}  '
+                            status += ' %{F' + self.__colors['status_alarm_fg'] + '}%{A:CMDbat:}%{F' + self.__colors['status_alarm_fg'] + '} ' + s + '%{A}  '
                     elif s.startswith('CHR'): # If it charges, change icon
                         s = s.lstrip('CHR ')
                         status += ' %{F' + self.__colors['status_icon_fg'] + '}%{A:CMDbat:}%{F' + self.__colors['status_fg'] + '} ' + s + '%{A}  '
@@ -288,13 +288,13 @@ class BSPWM(object):
             if w == ws[10]:
                 break
             if w[0] == 'o':
-                output += '%{B' + self.__colors['unfocused_ws_bg'] + '}%{F' + self.__colors['unfocused_ws_fg'] + '}%{T4} %{A:CMDws' + w[1] + ':}' + '\uF111' + '%{A} %{T-}%{B-}%{F-}'
+                output += '%{B' + self.__colors['unfocused_ws_bg'] + '}%{F' + self.__colors['unfocused_ws_fg'] + '}%{T3} %{A:CMDws' + w[1] + ':}' + '\uF111' + '%{A} %{T-}%{B-}%{F-}'
             elif w[0] == 'O':
-                output += '%{B' + self.__colors['focused_ws_bg'] + '}%{F' + self.__colors['focused_ws_fg'] + '}%{T4} %{A:CMDws' + w[1] + ':}' + '\uF111' + '%{A} %{T-}%{B-}%{F-}'
+                output += '%{B' + self.__colors['focused_ws_bg'] + '}%{F' + self.__colors['focused_ws_fg'] + '}%{T3} %{A:CMDws' + w[1] + ':}' + '\uF111' + '%{A} %{T-}%{B-}%{F-}'
             elif w[0] == 'f':
-                output += '%{B' + self.__colors['unfocused_ws_bg'] + '}%{F' + self.__colors['unfocused_ws_fg'] + '}%{T4} %{A:CMDws' + w[1] + ':}' + '\uF10C' + '%{A} %{T-}%{B-}%{F-}'
+                output += '%{B' + self.__colors['unfocused_ws_bg'] + '}%{F' + self.__colors['unfocused_ws_fg'] + '}%{T3} %{A:CMDws' + w[1] + ':}' + '\uF10C' + '%{A} %{T-}%{B-}%{F-}'
             elif w[0] == 'F':
-                output += '%{B' + self.__colors['focused_ws_bg'] + '}%{F' + self.__colors['focused_ws_fg'] + '}%{T4} %{A:CMDws' + w[1] + ':}' + '\uF10C' + '%{A} %{T-}%{B-}%{F-}'
+                output += '%{B' + self.__colors['focused_ws_bg'] + '}%{F' + self.__colors['focused_ws_fg'] + '}%{T3} %{A:CMDws' + w[1] + ':}' + '\uF10C' + '%{A} %{T-}%{B-}%{F-}'
         return output
 
     """
