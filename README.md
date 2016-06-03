@@ -21,7 +21,6 @@ Easy to use lemonbar parser.
 
 - Python 3
 - my [i3status](https://github.com/dj95/i3status) fork
-- gSimpleCal
 - Lemonbar with XFT-Patch
 - libnotify
 - python-gobject
