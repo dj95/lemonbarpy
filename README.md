@@ -9,12 +9,31 @@ Easy to use lemonbar parser.
 - Toggle status elements to icon or icon and text with left mouse button
 - Select workspace with mouse click
 - Transparency
+- Toggle over unix socket connection
 
 
 ### Screenshots
 
 ![shot1](./img/shot1.png)
 ![shot2](./img/shot2.png)
+
+
+### Usage
+
+To toggle one of the elements of your bar with keyboard shortcuts, just add
+run `./lbpyctl.py CMD` with CMD as:
+
+- date
+- vol
+- wlan
+- eth
+- vpn
+- bat
+
+
+to your hotkey-daemon(e.g. sxhkd).
+`lbpyctl.py` will then connect over a unix socket connection to the bar and
+send the correct command for the bar.
 
 
 ### Requirements

@@ -6,13 +6,28 @@
 
 
 import os
+import sys
 import json
+import signal
 
 
 import bspwm
 
 
 CONFIG_FILE = '/home/neo/Projekte/Python/lemonbarpy/conf/lemonbarpy.json'
+
+
+# TODO: remove this dirty solution
+BAR = None
+
+
+"""
+@description
+    Shutdown handler to shut down the bar gracefully.
+"""
+def sigint_handler(signal, frame):
+    BAR.shutdown()
+    sys.exit(0)
 
 
 """
@@ -30,8 +45,13 @@ def get_config():
 
 def main():
     b = bspwm.BSPWM(get_config())
+
+    global BAR
+    BAR = b
+
+    signal.signal(signal.SIGINT, sigint_handler)
+    
     b.draw_bar()
-    pass
 
 
 if __name__ == '__main__':

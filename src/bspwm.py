@@ -10,6 +10,7 @@ import os
 import sys
 import json
 import select
+import socket
 import subprocess
 
 
@@ -45,6 +46,13 @@ class BSPWM(object):
         self.__show_wlan = False
         self.__show_battery = False
 
+        # Socket for keyboard control
+        self.__socket = socket.socket(socket.AF_UNIX, socket.SOCK_RAW)
+        self.__socket.bind('/dev/shm/lemonbarpy.socket')
+        self.__socket.settimeout(0.1)
+        self.__socket.setblocking(0)
+
+        self.__run = True
 
     """
     @description
@@ -73,16 +81,24 @@ class BSPWM(object):
         poll.register(s.stdout)
         poll.register(s2.stdout)
         poll.register(self.__bar.stdout)
+        poll.register(self.__socket)
 
         status = ""
         line = ""
     
-        while True:
+        while self.__run:
             rlist = poll.poll()
             # Iterate through poll events
             for fd, event in rlist:
-                # Get stdout of subprocesses
-                ws = os.read(fd, 1024).decode('utf-8')
+                if fd == 3: # Get commands from socket connection
+                    try:
+                        data = self.__socket.recv(1024)
+                    except:
+                        continue
+                    ws = data.decode('utf-8')
+                else:
+                    # Get stdout of subprocesses
+                    ws = os.read(fd, 1024).decode('utf-8')
 
                 # If output starts with 'SYS' there are changes in the status line
                 # -> regenerate status line
@@ -155,6 +171,11 @@ class BSPWM(object):
                     
                     # Write into stdin of lemonbar
                     self.write_into_lemonbar(line + status) 
+
+    def shutdown(self):
+        print('Shut down bar')
+        os.remove('/dev/shm/lemonbarpy.socket')
+        self.__run = False
 
     """
     @description
