@@ -9,7 +9,7 @@ import socket
 import argparse
 
 
-ALLOWED_COMMANDS = ['wlan', 'eth', 'vol', 'bat', 'date', 'vpn']
+ALLOWED_COMMANDS = ['wlan', 'eth', 'vol', 'bat', 'date', 'vpn', 'spotify']
 
 
 def send_command(command):

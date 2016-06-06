@@ -18,6 +18,9 @@ gi.require_version('Notify', '0.7')
 from gi.repository import Notify
 
 
+import utils
+
+
 I3STATUS_PATH = '/opt/i3status/i3status'
 I3STATUS_CONFIG = '/home/neo/Projekte/Python/lemonbarpy/conf/i3status.conf'
 
@@ -31,7 +34,7 @@ class BSPWM(object):
         self.__colors = colors
 
         # Start lemonbar in a subprocess
-        self.__bar = subprocess.Popen(['lemonbar', '-B', colors['bg'], '-F', colors['fg'], '-f', "Terminesspowerline-8", '-f', "Ionicons-10", '-f', 'Icons-8', '-f', "Serif-9", '-a', '30' ], stdin=subprocess.PIPE, stdout=subprocess.PIPE)
+        self.__bar = subprocess.Popen(['lemonbar', '-B', colors['bg'], '-F', colors['fg'], '-f', "Terminesspowerline-8", '-f', "Ionicons-10", '-f', 'Icons-8', '-f', 'FontAwesome-10', '-f', "Serif-9", '-a', '30' ], stdin=subprocess.PIPE, stdout=subprocess.PIPE)
 
         # Init notifier for displaying volume stats with dunst
         Notify.init('bar')
@@ -40,17 +43,15 @@ class BSPWM(object):
         self.__volume = None
         self.__vpn = None
         self.__state = None
-
+        self.__spotify = None
+        self.spotify_callback_value = None
+        self.keyboard_callback_value = None
+        
         # Status toggles
         self.__show_eth = False
         self.__show_wlan = False
         self.__show_battery = False
-
-        # Socket for keyboard control
-        self.__socket = socket.socket(socket.AF_UNIX, socket.SOCK_RAW)
-        self.__socket.bind('/dev/shm/lemonbarpy.socket')
-        self.__socket.settimeout(0.1)
-        self.__socket.setblocking(0)
+        self.__show_spotify = False
 
         self.__run = True
 
@@ -74,40 +75,55 @@ class BSPWM(object):
         # Start i3status subprocess to get the status of the system
         s2 = subprocess.Popen([I3STATUS_PATH, '--config', I3STATUS_CONFIG], stdout=subprocess.PIPE)
 
+        # Start utils subprocess for spotify, keyboard-shortcuts etc...
+        s3 = subprocess.Popen(['./utils.py'], stdout=subprocess.PIPE)
+
         # Register poll to act on the output of both subprocesses
         poll = select.poll()
 
         # Register subprocess in poll
         poll.register(s.stdout)
         poll.register(s2.stdout)
+        poll.register(s3.stdout)
         poll.register(self.__bar.stdout)
-        poll.register(self.__socket)
+        #poll.register(self.__socket)
 
-        status = ""
+        status = {'date':'', 'spotify':'', 'vol':'', 'wlan':'', 'eth':'', 'vpn':'', 'bat':''}
         line = ""
+        utils = ""
     
         while self.__run:
             rlist = poll.poll()
             # Iterate through poll events
             for fd, event in rlist:
-                if fd == 3: # Get commands from socket connection
-                    try:
-                        data = self.__socket.recv(1024)
-                    except:
-                        continue
-                    ws = data.decode('utf-8')
-                else:
-                    # Get stdout of subprocesses
-                    ws = os.read(fd, 1024).decode('utf-8')
+                # Get stdout of subprocesses
+                ws = os.read(fd, 1024).decode('utf-8')
 
                 # If output starts with 'SYS' there are changes in the status line
                 # -> regenerate status line
                 if ws.startswith('SYS'):
                     stats = ws.split(' °')[1:]
                     status = self.generate_status(stats)
+                    status['spotify'] = utils
+
                     # Write into stdin of lemonbar
-                    self.write_into_lemonbar(line + status)
+                    line = self.generate_line(workspaces, status, title) 
+                    self.write_into_lemonbar(line)
                     continue
+                elif ws.startswith('UTILS'): # Uitls like spotify
+                    ws = ws.lstrip('UTILS')
+                    self.__spotify = ws
+                    if ws == 'None':
+                        utils = ' %{F' + self.__colors['status_icon_fg_muted'] + '}%{A:CMDspotify:}%{A} '
+                    else:
+                        if self.__show_spotify:
+                            utils = ' %{F' + self.__colors['status_icon_fg'] + '}%{A:CMDspotify:} ' + ws[0:25] + '%{A} '
+                        else:
+                            utils = ' %{F' + self.__colors['status_icon_fg'] + '}%{T4}%{A:CMDspotify:}%{T-}%{A} '
+                    status['spotify'] = utils
+                    # Write into stdin of lemonbar
+                    line = self.generate_line(workspaces, status, title) 
+                    self.write_into_lemonbar(line)
                 elif ws.startswith('CMD'): # Clickable icons
                     ws = ws.lstrip('CMD')
                     if ws.startswith('bat'): # Toggle battery stats
@@ -119,6 +135,16 @@ class BSPWM(object):
                         self.__show_wlan = not self.__show_wlan
                     elif ws.startswith('eth'): # Toggle ethernet stats
                         self.__show_eth = not self.__show_eth
+                    elif ws.startswith('spotify'): # Toggle spotify information
+                        self.__show_spotify = not self.__show_spotify
+                        if self.__spotify == 'None':
+                            utils = ' %{F' + self.__colors['status_icon_fg_muted'] + '}%{A:CMDspotify:}%{A} '
+                        else:
+                            if self.__show_spotify:
+                                utils = ' %{F' + self.__colors['status_icon_fg'] + '}%{A:CMDspotify:} ' + self.__spotify[0:25] + '%{A} '
+                            else:
+                                utils = ' %{F' + self.__colors['status_icon_fg'] + '}%{A:CMDspotify:}%{A} '
+                        status['spotify'] = utils
                     elif ws.startswith('date'):
                         if self.__calendar is None:
                             self.__calendar = subprocess.Popen(['/home/neo/.dotfiles/cal.sh'])
@@ -133,9 +159,13 @@ class BSPWM(object):
 
                     # Update the status, if to toggle single stats
                     status = self.generate_status(self.__state)
+                    status['spotify'] = utils
+                    
+                    # Sum up all information in a line for lemonbar with colors and so on
+                    line = self.generate_line(workspaces, status, title) 
 
                     # Write into stdin of lemonbar
-                    self.write_into_lemonbar(line + status)
+                    self.write_into_lemonbar(line)
                     continue
                 elif ws.startswith('WM'): # Generate workspace line
                     ws = ws.split(':')
@@ -165,12 +195,18 @@ class BSPWM(object):
                         title = ""
 
                     # Sum up all information in a line for lemonbar with colors and so on
-                    line = '%{l} ' + workspaces + ' %{B-}%{F-}'\
-                        + '%{B' + self.__colors['layout_bg'] + '}%{F' + self.__colors['layout_fg'] + '}%{B-}%{F-}'\
-                        + '%{B' + self.__colors['title_bg'] + '}%{F' + self.__colors['title_fg'] + '}' + title + ' %{B-}%{F-}'
-                    
+                    line = self.generate_line(workspaces, status, title) 
+
                     # Write into stdin of lemonbar
-                    self.write_into_lemonbar(line + status) 
+                    self.write_into_lemonbar(line) 
+
+    def generate_line(self, workspaces, status, title):
+        line = '%{l} ' + workspaces + ' %{B-}%{F-}'\
+            + '%{B' + self.__colors['layout_bg'] + '}%{F' + self.__colors['layout_fg'] + '}%{B-}%{F-}'\
+            + '%{B' + self.__colors['title_bg'] + '}%{F' + self.__colors['title_fg'] + '}' + title + ' %{B-}%{F-}'\
+            + status['date'] + '%{r}' + status['vol'] + status['spotify'] + status['wlan'] + status['eth']\
+            + status['vpn'] + status['bat']
+        return line
 
     def shutdown(self):
         print('Shut down bar')
@@ -192,7 +228,6 @@ class BSPWM(object):
     """
     def generate_status(self, state):
         self.__state = state 
-        status = '%{r}%{B' + self.__colors['status_bg'] + '}%{F' + self.__colors['status_fg'] + '} '
         for s in state:
             # Volume
             if s.startswith('VOL'):
@@ -200,64 +235,63 @@ class BSPWM(object):
                 # Check if muted
                 self.__volume = s
                 if s.startswith('muted'):
-                    status += ' %{F' + self.__colors['status_icon_fg_muted'] + '}%{A:CMDvol:}%{A}%{F' + self.__colors['status_fg'] + '} '
+                    volume = ' %{F' + self.__colors['status_icon_fg_muted'] + '}%{A:CMDvol:}%{A}%{F' + self.__colors['status_fg'] + '} '
                 else: # If not muted
                     percent = int(s[:-1])
                     # Icon to indicate the volume
                     if percent > 88:
-                        status += ' %{F' + self.__colors['status_icon_fg'] + '}%{A:CMDvol:} ⣿%{A}%{F' + self.__colors['status_fg'] + '} '
+                        volume = ' %{F' + self.__colors['status_icon_fg'] + '}%{A:CMDvol:} ⣿%{A}%{F' + self.__colors['status_fg'] + '} '
                     elif percent <= 88 and percent > 77: 
-                        status += ' %{F' + self.__colors['status_icon_fg'] + '}%{A:CMDvol:} ⣷%{A}%{F' + self.__colors['status_fg'] + '} '
+                        volume = ' %{F' + self.__colors['status_icon_fg'] + '}%{A:CMDvol:} ⣷%{A}%{F' + self.__colors['status_fg'] + '} '
                     elif percent <= 77 and percent > 66: 
-                        status += ' %{F' + self.__colors['status_icon_fg'] + '}%{A:CMDvol:} ⣶%{A}%{F' + self.__colors['status_fg'] + '} '
+                        volume = ' %{F' + self.__colors['status_icon_fg'] + '}%{A:CMDvol:} ⣶%{A}%{F' + self.__colors['status_fg'] + '} '
                     elif percent <= 66 and percent > 55: 
-                        status += ' %{F' + self.__colors['status_icon_fg'] + '}%{A:CMDvol:} ⣦%{A}%{F' + self.__colors['status_fg'] + '} '
+                        volume = ' %{F' + self.__colors['status_icon_fg'] + '}%{A:CMDvol:} ⣦%{A}%{F' + self.__colors['status_fg'] + '} '
                     elif percent <= 55 and percent > 44: 
-                        status += ' %{F' + self.__colors['status_icon_fg'] + '}%{A:CMDvol:} ⣤%{A}%{F' + self.__colors['status_fg'] + '} '
+                        volume = ' %{F' + self.__colors['status_icon_fg'] + '}%{A:CMDvol:} ⣤%{A}%{F' + self.__colors['status_fg'] + '} '
                     elif percent <= 44 and percent > 33: 
-                        status += ' %{F' + self.__colors['status_icon_fg'] + '}%{A:CMDvol:} ⣄%{A}%{F' + self.__colors['status_fg'] + '} '
+                        volume = ' %{F' + self.__colors['status_icon_fg'] + '}%{A:CMDvol:} ⣄%{A}%{F' + self.__colors['status_fg'] + '} '
                     elif percent <= 33 and percent > 22: 
-                        status += ' %{F' + self.__colors['status_icon_fg'] + '}%{A:CMDvol:} ⣀%{A}%{F' + self.__colors['status_fg'] + '} '
+                        volume = ' %{F' + self.__colors['status_icon_fg'] + '}%{A:CMDvol:} ⣀%{A}%{F' + self.__colors['status_fg'] + '} '
                     elif percent <= 22 and percent > 11: 
-                        status += ' %{F' + self.__colors['status_icon_fg'] + '}%{A:CMDvol:} ⡀%{A}%{F' + self.__colors['status_fg'] + '} '
+                        volume = ' %{F' + self.__colors['status_icon_fg'] + '}%{A:CMDvol:} ⡀%{A}%{F' + self.__colors['status_fg'] + '} '
                     elif percent <= 11:
-                        status += ' %{F' + self.__colors['status_icon_fg'] + '}%{A:CMDvol:}%{A}%{F' + self.__colors['status_fg'] + '} '
+                        volume = ' %{F' + self.__colors['status_icon_fg'] + '}%{A:CMDvol:}%{A}%{F' + self.__colors['status_fg'] + '} '
             # Wifi
             elif s.startswith('WLAN'):
                 if self.__show_wlan: # With stats
                     if not s.lstrip('WLAN') == 'down': # Wifi down
-                        status += ' %{F' + self.__colors['status_icon_fg'] + '}%{A:CMDwlan:}%{F' + self.__colors['status_fg'] + '} ' + s.lstrip('WLAN') + '%{A}  '
+                        wlan = ' %{F' + self.__colors['status_icon_fg'] + '}%{A:CMDwlan:}%{F' + self.__colors['status_fg'] + '} ' + s.lstrip('WLAN') + '%{A}  '
                     else: # Wifi connected
-                        status += ' %{F' + self.__colors['status_icon_fg_muted'] + '}%{A:CMDwlan:}%{F' + self.__colors['status_fg'] + '} ' + s.lstrip('WLAN') + '%{A}  '
+                        wlan = ' %{F' + self.__colors['status_icon_fg_muted'] + '}%{A:CMDwlan:}%{F' + self.__colors['status_fg'] + '} ' + s.lstrip('WLAN') + '%{A}  '
                 else: # Without stats
                     if not s.lstrip('WLAN') == 'down': # Wifi down
-                        status += ' %{F' + self.__colors['status_icon_fg'] + '}%{A:CMDwlan:}%{A}%{F' + self.__colors['status_fg'] + '} '
+                        wlan = ' %{F' + self.__colors['status_icon_fg'] + '}%{A:CMDwlan:}%{A}%{F' + self.__colors['status_fg'] + '} '
                     else: # Wifi connected
-                        status += ' %{F' + self.__colors['status_icon_fg_muted'] + '}%{A:CMDwlan:}%{A}%{F' + self.__colors['status_fg'] + '} '
+                        wlan = ' %{F' + self.__colors['status_icon_fg_muted'] + '}%{A:CMDwlan:}%{A}%{F' + self.__colors['status_fg'] + '} '
             # Ethernet
             elif s.startswith('ETH'):
                 if self.__show_eth:  # With stats
                     if not s.lstrip('ETH') == 'down': # Eth down
-                        status += ' %{F' + self.__colors['status_icon_fg'] + '}%{A:CMDeth:}%{F' + self.__colors['status_fg'] + '} ' + s.lstrip('ETH') + '%{A}  '
+                        eth = ' %{F' + self.__colors['status_icon_fg'] + '}%{A:CMDeth:}%{F' + self.__colors['status_fg'] + '} ' + s.lstrip('ETH') + '%{A}  '
                     else: # Eth connected
-                        status += ' %{F' + self.__colors['status_icon_fg_muted'] + '}%{A:CMDeth:}%{F' + self.__colors['status_fg'] + '} ' + s.lstrip('ETH') + '%{A}  '
+                        eth = ' %{F' + self.__colors['status_icon_fg_muted'] + '}%{A:CMDeth:}%{F' + self.__colors['status_fg'] + '} ' + s.lstrip('ETH') + '%{A}  '
                 else: # Without stats
                     if not s.lstrip('ETH') == 'down': # Eth down
-                        status += ' %{F' + self.__colors['status_icon_fg'] + '}%{A:CMDeth:}%{A}%{F' + self.__colors['status_fg'] + '} '
+                        eth = ' %{F' + self.__colors['status_icon_fg'] + '}%{A:CMDeth:}%{A}%{F' + self.__colors['status_fg'] + '} '
                     else: # Eth connected
-                        status += ' %{F' + self.__colors['status_icon_fg_muted'] + '}%{A:CMDeth:}%{A}%{F' + self.__colors['status_fg'] + '} '
+                        eth = ' %{F' + self.__colors['status_icon_fg_muted'] + '}%{A:CMDeth:}%{A}%{F' + self.__colors['status_fg'] + '} '
             # VPN
             elif s.startswith('VPN'):
                 self.__vpn = s.lstrip('VPN')
                 if s.startswith('VPNyes'):
-                    status += ' %{F' + self.__colors['status_icon_fg'] + '}%{A:CMDvpn:}%{A}%{F' + self.__colors['status_fg'] + '} '
+                    vpn = ' %{F' + self.__colors['status_icon_fg'] + '}%{A:CMDvpn:}%{A}%{F' + self.__colors['status_fg'] + '} '
                 else:
-                    status += ' %{F' + self.__colors['status_icon_fg_muted'] + '}%{A:CMDvpn:}%{A}%{F' + self.__colors['status_fg'] + '} '
+                    vpn = ' %{F' + self.__colors['status_icon_fg_muted'] + '}%{A:CMDvpn:}%{A}%{F' + self.__colors['status_fg'] + '} '
             # Battery
             elif s.startswith('BATT'):
                 s = s[4:]
                 # If battery is not charging
-                print(s)
                 if self.__show_battery: # Display battery stats
                     if s.startswith('BAT') or s.startswith('UNK') or s.startswith('FLL'):
                         percent = int(s.split(' ')[1].split(',')[0])
@@ -266,16 +300,16 @@ class BSPWM(object):
                         s = s.lstrip('FULL ')
                         #  Change icon related to the actual battery load
                         if percent > 80:
-                            status += ' %{F' + self.__colors['status_icon_fg'] + '}%{A:CMDbat:}%{F' + self.__colors['status_fg'] + '} ' + s + '%{A}  '
+                            battery = ' %{F' + self.__colors['status_icon_fg'] + '}%{A:CMDbat:}%{F' + self.__colors['status_fg'] + '} ' + s + '%{A}  '
                         elif percent <= 80 and percent > 50:
-                            status += ' %{F' + self.__colors['status_icon_fg'] + '}%{A:CMDbat:}%{F' + self.__colors['status_fg'] + '} ' + s + '%{A}  '
+                            battery = ' %{F' + self.__colors['status_icon_fg'] + '}%{A:CMDbat:}%{F' + self.__colors['status_fg'] + '} ' + s + '%{A}  '
                         elif percent <= 50 and percent > 30:
-                            status += ' %{F' + self.__colors['status_icon_fg'] + '}%{A:CMDbat:}%{F' + self.__colors['status_fg'] + '} ' + s + '%{A}  '
+                            battery = ' %{F' + self.__colors['status_icon_fg'] + '}%{A:CMDbat:}%{F' + self.__colors['status_fg'] + '} ' + s + '%{A}  '
                         elif percent <= 30:
-                            status += ' %{F' + self.__colors['status_alarm_fg'] + '}%{A:CMDbat:}%{F' + self.__colors['status_alarm_fg'] + '} ' + s + '%{A}  '
+                            battery = ' %{F' + self.__colors['status_alarm_fg'] + '}%{A:CMDbat:}%{F' + self.__colors['status_alarm_fg'] + '} ' + s + '%{A}  '
                     elif s.startswith('CHR'): # If it charges, change icon
                         s = s.lstrip('CHR ')
-                        status += ' %{F' + self.__colors['status_icon_fg'] + '}%{A:CMDbat:}%{F' + self.__colors['status_fg'] + '} ' + s + '%{A}  '
+                        battery = ' %{F' + self.__colors['status_icon_fg'] + '}%{A:CMDbat:}%{F' + self.__colors['status_fg'] + '} ' + s + '%{A}  '
                 else: # Hide battery stats
                     if s.startswith('BAT') or s.startswith('UNK') or s.startswith('FLL'):
                         percent = int(s.split(' ')[1].split(',')[0])
@@ -284,19 +318,26 @@ class BSPWM(object):
                         s = s.lstrip('FULL ')
                         #  Change icon related to the actual battery load
                         if percent > 80:
-                            status += ' %{F' + self.__colors['status_icon_fg'] + '}%{A:CMDbat:}%{A}%{F' + self.__colors['status_fg'] + '} '
+                            battery = ' %{F' + self.__colors['status_icon_fg'] + '}%{A:CMDbat:}%{A}%{F' + self.__colors['status_fg'] + '} '
                         elif percent <= 80 and percent > 50:
-                            status += ' %{F' + self.__colors['status_icon_fg'] + '}%{A:CMDbat:}%{A}%{F' + self.__colors['status_fg'] + '} '
+                            battery = ' %{F' + self.__colors['status_icon_fg'] + '}%{A:CMDbat:}%{A}%{F' + self.__colors['status_fg'] + '} '
                         elif percent <= 50 and percent > 30:
-                            status += ' %{F' + self.__colors['status_icon_fg'] + '}%{A:CMDbat:}%{A}%{F' + self.__colors['status_fg'] + '} '
+                            battery = ' %{F' + self.__colors['status_icon_fg'] + '}%{A:CMDbat:}%{A}%{F' + self.__colors['status_fg'] + '} '
                         elif percent <= 30:
-                            status += ' %{F' + self.__colors['status_alarm_fg'] + '}%{A:CMDbat:}%{A}%{F' + self.__colors['status_alarm_fg'] + '} '
+                            battery = ' %{F' + self.__colors['status_alarm_fg'] + '}%{A:CMDbat:}%{A}%{F' + self.__colors['status_alarm_fg'] + '} '
                     elif s.startswith('CHR'): # If it charges, change icon
                         s = s.lstrip('CHR ')
-                        status += ' %{F' + self.__colors['status_icon_fg'] + '}%{A:CMDbat:}%{A}%{F' + self.__colors['status_fg'] + '} '
+                        battery = ' %{F' + self.__colors['status_icon_fg'] + '}%{A:CMDbat:}%{A}%{F' + self.__colors['status_fg'] + '} '
             # Date
             elif s.startswith('DATE'):
-                status = '%{c}%{F' + self.__colors['status_fg'] + '}%{A:CMDdate:} ' + s.lstrip('DATE')[:-1].split(' ')[1] + '%{A} ' + status
+                date = '%{c}%{F' + self.__colors['status_fg'] + '}%{A:CMDdate:} ' + s.lstrip('DATE')[:-1].split(' ')[1] + '%{A} '
+        status = {}
+        status['date'] = date
+        status['vol'] = volume
+        status['wlan'] = wlan
+        status['eth'] = eth
+        status['bat'] = battery
+        status['vpn'] = vpn
         return status
 
     """
