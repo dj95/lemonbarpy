@@ -111,7 +111,7 @@ class BSPWM(object):
                     self.write_into_lemonbar(line)
                     continue
                 elif ws.startswith('UTILS'): # Uitls like spotify
-                    ws = ws.lstrip('UTILS')
+                    ws = ws[5:]
                     self.__spotify = ws
                     if ws == 'None':
                         utils = ' %{F' + self.__colors['status_icon_fg_muted'] + '}%{A:CMDspotify:}%{A} '
@@ -141,7 +141,7 @@ class BSPWM(object):
                             utils = ' %{F' + self.__colors['status_icon_fg_muted'] + '}%{A:CMDspotify:}%{A} '
                         else:
                             if self.__show_spotify:
-                                utils = ' %{F' + self.__colors['status_icon_fg'] + '}%{A:CMDspotify:} ' + self.__spotify[0:25] + '%{A} '
+                                utils = ' %{F' + self.__colors['status_icon_fg'] + '}%{A:CMDspotify:}%{T4}%{T-} ' + self.__spotify[0:25] + '%{A} '
                             else:
                                 utils = ' %{F' + self.__colors['status_icon_fg'] + '}%{A:CMDspotify:}%{A} '
                         status['spotify'] = utils
