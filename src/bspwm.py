@@ -11,6 +11,8 @@ import sys
 import json
 import select
 import socket
+import _thread
+import netifaces
 import subprocess
 
 
@@ -46,12 +48,16 @@ class BSPWM(object):
         self.__spotify = None
         self.spotify_callback_value = None
         self.keyboard_callback_value = None
+        self.status = {'date':'', 'spotify':'', 'vol':'', 'wlan':'', 'eth':'', 'vpn':'', 'bat':''}
+        self.workspaces = ''
+        self.title = ''
         
         # Status toggles
         self.__show_eth = False
         self.__show_wlan = False
         self.__show_battery = False
         self.__show_spotify = False
+
 
         self.__run = True
 
@@ -69,29 +75,42 @@ class BSPWM(object):
         Generates the status line and writes it into lemonbar.
     """
     def draw_bar(self):
+        # WM selection
+        if self.__colors['wm'] == 'i3':
+            import i3ipc
+
+            self.__socket = i3ipc.Connection()
+
+            self.__socket.on("workspace", self.trigger_i3_workspaces)
+            self.__socket.on("window", self.trigger_i3_workspaces)
+            # Start i3 main in seperate thread
+            #NOTE: Otherwise it blocks the whole status
+            _thread.start_new_thread(self.__socket.main, ())
+            self.get_i3_workspaces()
+    
         # Start bspc subprocess to get the information from bspwm
-        s = subprocess.Popen(['bspc', 'subscribe'], stdout=subprocess.PIPE)
+        if self.__colors['wm'] == 'bspwm':
+            s = subprocess.Popen(['bspc', 'subscribe'], stdout=subprocess.PIPE)
 
         # Start i3status subprocess to get the status of the system
         s2 = subprocess.Popen([I3STATUS_PATH, '--config', I3STATUS_CONFIG], stdout=subprocess.PIPE)
 
         # Start utils subprocess for spotify, keyboard-shortcuts etc...
-        s3 = subprocess.Popen(['./utils.py'], stdout=subprocess.PIPE)
+        s3 = subprocess.Popen([os.path.dirname(__file__) + '/utils.py'], stdout=subprocess.PIPE)
 
         # Register poll to act on the output of both subprocesses
         poll = select.poll()
 
         # Register subprocess in poll
-        poll.register(s.stdout)
+        if self.__colors['wm'] == 'bspwm':
+            poll.register(s.stdout)
         poll.register(s2.stdout)
         poll.register(s3.stdout)
         poll.register(self.__bar.stdout)
-        #poll.register(self.__socket)
 
-        status = {'date':'', 'spotify':'', 'vol':'', 'wlan':'', 'eth':'', 'vpn':'', 'bat':''}
         line = ""
         utils = ""
-    
+
         while self.__run:
             rlist = poll.poll()
             # Iterate through poll events
@@ -103,11 +122,11 @@ class BSPWM(object):
                 # -> regenerate status line
                 if ws.startswith('SYS'):
                     stats = ws.split(' °')[1:]
-                    status = self.generate_status(stats)
-                    status['spotify'] = utils
+                    self.status = self.generate_status(stats)
+                    self.status['spotify'] = utils
 
                     # Write into stdin of lemonbar
-                    line = self.generate_line(workspaces, status, title) 
+                    line = self.generate_line(self.workspaces, self.status, self.title) 
                     self.write_into_lemonbar(line)
                     continue
                 elif ws.startswith('UTILS'): # Uitls like spotify
@@ -120,9 +139,9 @@ class BSPWM(object):
                             utils = ' %{F' + self.__colors['status_icon_fg'] + '}%{A:CMDspotify:} ' + ws[0:25] + '%{A} '
                         else:
                             utils = ' %{F' + self.__colors['status_icon_fg'] + '}%{T4}%{A:CMDspotify:}%{T-}%{A} '
-                    status['spotify'] = utils
+                    self.status['spotify'] = utils
                     # Write into stdin of lemonbar
-                    line = self.generate_line(workspaces, status, title) 
+                    line = self.generate_line(self.workspaces, self.status, self.title) 
                     self.write_into_lemonbar(line)
                 elif ws.startswith('CMD'): # Clickable icons
                     ws = ws.lstrip('CMD')
@@ -144,7 +163,7 @@ class BSPWM(object):
                                 utils = ' %{F' + self.__colors['status_icon_fg'] + '}%{A:CMDspotify:}%{T4}%{T-} ' + self.__spotify[0:25] + '%{A} '
                             else:
                                 utils = ' %{F' + self.__colors['status_icon_fg'] + '}%{A:CMDspotify:}%{A} '
-                        status['spotify'] = utils
+                        self.status['spotify'] = utils
                     elif ws.startswith('date'):
                         if self.__calendar is None:
                             self.__calendar = subprocess.Popen(['/home/neo/.dotfiles/cal.sh'])
@@ -158,11 +177,11 @@ class BSPWM(object):
                         notification.show()
 
                     # Update the status, if to toggle single stats
-                    status = self.generate_status(self.__state)
-                    status['spotify'] = utils
+                    self.status = self.generate_status(self.__state)
+                    self.status['spotify'] = utils
                     
                     # Sum up all information in a line for lemonbar with colors and so on
-                    line = self.generate_line(workspaces, status, title) 
+                    line = self.generate_line(self.workspaces, self.status, self.title) 
 
                     # Write into stdin of lemonbar
                     self.write_into_lemonbar(line)
@@ -176,7 +195,7 @@ class BSPWM(object):
                         layout = ''
                     
                     # Generate workspaces from bspc output
-                    workspaces = self.generate_workspaces(ws[1:])
+                    self.workspaces = self.generate_workspaces(ws[1:])
 
                     # Get workspace root tree
                     tree = self.get_tree()
@@ -188,14 +207,14 @@ class BSPWM(object):
                     if windows != []:
                         # Check the layout of the workspace to generate the title correctly
                         if tree['layout'] == 'tiled':
-                            title = self.get_tiled_title(windows)
+                            self.title = self.get_tiled_title(windows)
                         elif tree['layout'] == 'monocle':
-                            title = self.get_monocle_title(windows)
+                            self.title = self.get_monocle_title(windows)
                     else: # Empty workspace - empty title :D
-                        title = ""
+                        self.title = ""
 
                     # Sum up all information in a line for lemonbar with colors and so on
-                    line = self.generate_line(workspaces, status, title) 
+                    line = self.generate_line(self.workspaces, self.status, self.title) 
 
                     # Write into stdin of lemonbar
                     self.write_into_lemonbar(line) 
@@ -207,6 +226,49 @@ class BSPWM(object):
             + status['date'] + '%{r}' + status['vol'] + status['spotify'] + status['wlan'] + status['eth']\
             + status['vpn'] + status['bat']
         return line
+
+    """
+    @description
+        Trigger on i3 workspace change and some other events to refresh the ws line.
+    """
+    def trigger_i3_workspaces(self, i3, event):
+        if event.change in ('focus', 'init', 'empty', 'urgent', 'title'):
+            self.get_i3_workspaces()
+
+    """
+    @description
+        Generates the workspace and title  for i3wm.
+    """
+    def get_i3_workspaces(self):
+        # Get workspaces
+        workspaces = self.__socket.get_workspaces()
+        output = ""
+        for ws in workspaces:
+            if ws['focused']:
+                output += '%{B' + self.__colors['focused_ws_bg'] + '}%{F' + self.__colors['focused_ws_fg'] + '}%{T3} %{A:CMDws' + ws['name'] + ':}' + '\uF111' + '%{A} %{T-}%{B-}%{F-}'
+            else:
+                output += '%{B' + self.__colors['unfocused_ws_bg'] + '}%{F' + self.__colors['unfocused_ws_fg'] + '}%{T3} %{A:CMDws' + ws['name'] + ':}' + '\uF10C' + '%{A} %{T-}%{B-}%{F-}'
+        self.workspaces = output
+
+        # Get focused title
+        try:
+            tree = self.__socket.get_tree()
+            focused = tree.find_focused()
+            if focused.name:
+                self.title = focused.name + ' '
+                for w in workspaces:
+                    if focused.name == w['name']:
+                        self.title = ''
+            else:
+                self.title = ''
+        except Exception as e:
+            self.title = ''
+
+        # Sum up all information in a line for lemonbar with colors and so on
+        line = self.generate_line(self.workspaces, self.status, self.title) 
+
+        # Write into stdin of lemonbar
+        self.write_into_lemonbar(line) 
 
     def shutdown(self):
         print('Shut down bar')
@@ -284,7 +346,13 @@ class BSPWM(object):
             # VPN
             elif s.startswith('VPN'):
                 self.__vpn = s.lstrip('VPN')
+                vpn_state = ''
                 if s.startswith('VPNyes'):
+                    interfaces = netifaces.interfaces()
+                    for i in interfaces:
+                        if i.startswith('ovpn'):
+                            vpn_state += netifaces.ifaddresses(i)[2][0]['addr'] + ', '
+                    self.__vpn = vpn_state[:-2]
                     vpn = ' %{F' + self.__colors['status_icon_fg'] + '}%{A:CMDvpn:}%{A}%{F' + self.__colors['status_fg'] + '} '
                 else:
                     vpn = ' %{F' + self.__colors['status_icon_fg_muted'] + '}%{A:CMDvpn:}%{A}%{F' + self.__colors['status_fg'] + '} '

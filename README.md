@@ -10,6 +10,7 @@ Easy to use lemonbar parser.
 - Select workspace with mouse click
 - Transparency
 - Toggle over unix socket connection
+- i3 and BSPWM-support
 
 
 ### Screenshots

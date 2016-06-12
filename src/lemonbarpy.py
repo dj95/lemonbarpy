@@ -9,6 +9,7 @@ import os
 import sys
 import json
 import signal
+import argparse
 
 
 import bspwm
@@ -34,17 +35,24 @@ def sigint_handler(signal, frame):
 @description
     Reads the json config file for color configuration.
 """
-def get_config():
-    if not os.path.isfile(CONFIG_FILE):
+def get_config(config_file):
+    if not os.path.isfile(config_file):
         return False
 
-    with open(CONFIG_FILE, 'r') as fp:
+    with open(config_file, 'r') as fp:
         data = json.loads(fp.read())
     return data
 
 
 def main():
-    b = bspwm.BSPWM(get_config())
+    parser= argparse.ArgumentParser()
+    parser.add_argument('-c', '--config', type=str, help='Specify a config file')
+    args = parser.parse_args()
+
+    if args.config:
+        b = bspwm.BSPWM(get_config(args.config))
+    else:
+        b = bspwm.BSPWM(get_config(CONFIG_FILE))
 
     global BAR
     BAR = b

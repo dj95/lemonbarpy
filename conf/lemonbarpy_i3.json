@@ -1,5 +1,5 @@
 {
-    "wm":"bspwm",
+    "wm":"i3",
     "focused_ws_fg":"#BDBDBD",
     "focused_ws_bg":"#00000000",
     "focused_ws_underlined":"True",
