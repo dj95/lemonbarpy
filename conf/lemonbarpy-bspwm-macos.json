@@ -2,7 +2,7 @@
     "wm":"bspwm",
     "focused_ws_fg":"#000000",
     "focused_ws_bg":"#BBFFFFFF",
-    "focused_ws_underlined":"True",
+    "focused_ws_underlined":"False",
     "unfocused_ws_fg":"#777777",
     "unfocused_ws_bg":"#BBFFFFFF",
     "urgent_ws_fg":"#FF34322E",

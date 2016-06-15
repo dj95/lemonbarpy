@@ -4,7 +4,7 @@
     "focused_ws_bg":"#00000000",
     "focused_ws_underlined":"False",
     "unfocused_ws_fg":"#848484",
-    "unfocused_ws_bg":"#BB000000",
+    "unfocused_ws_bg":"#00000000",
     "urgent_ws_fg":"#FF34322E",
     "urgent_ws_bg":"#00000000",
     "title_fg":"#FFFFFF",
