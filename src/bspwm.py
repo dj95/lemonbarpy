@@ -41,6 +41,7 @@ class BSPWM(object):
         # Init notifier for displaying volume stats with dunst
         Notify.init('bar')
 
+        # Panel variables to save intermediate states 
         self.__calendar = None
         self.__volume = None
         self.__vpn = None
@@ -245,7 +246,10 @@ class BSPWM(object):
         output = ""
         for ws in workspaces:
             if ws['focused']:
-                output += '%{B' + self.__colors['focused_ws_bg'] + '}%{F' + self.__colors['focused_ws_fg'] + '}%{T3} %{A:CMDws' + ws['name'] + ':}' + '\uF111' + '%{A} %{T-}%{B-}%{F-}'
+                if self.__colors['focused_ws_underlined'] == 'True':
+                    output += '%{B' + self.__colors['focused_ws_bg'] + '}%{F' + self.__colors['focused_ws_fg'] + '}%{T3}%{U' + self.__colors['focused_ws_fg'] + '}%{+u} %{A:CMDws' + ws['name'] + ':}' + '\uF111' + '%{A} %{-u}%{U-}{T-}%{B-}%{F-}'
+                else:
+                    output += '%{B' + self.__colors['focused_ws_bg'] + '}%{F' + self.__colors['focused_ws_fg'] + '}%{T3} %{A:CMDws' + ws['name'] + ':}' + '\uF111' + '%{A} %{T-}%{B-}%{F-}'
             else:
                 output += '%{B' + self.__colors['unfocused_ws_bg'] + '}%{F' + self.__colors['unfocused_ws_fg'] + '}%{T3} %{A:CMDws' + ws['name'] + ':}' + '\uF10C' + '%{A} %{T-}%{B-}%{F-}'
         self.workspaces = output
@@ -421,11 +425,17 @@ class BSPWM(object):
             if w[0] == 'o':
                 output += '%{B' + self.__colors['unfocused_ws_bg'] + '}%{F' + self.__colors['unfocused_ws_fg'] + '}%{T3} %{A:CMDws' + w[1] + ':}' + '\uF111' + '%{A} %{T-}%{B-}%{F-}'
             elif w[0] == 'O':
-                output += '%{B' + self.__colors['focused_ws_bg'] + '}%{F' + self.__colors['focused_ws_fg'] + '}%{T3} %{A:CMDws' + w[1] + ':}' + '\uF111' + '%{A} %{T-}%{B-}%{F-}'
+                if self.__colors['focused_ws_underlined'] == 'True':
+                    output += '%{B' + self.__colors['focused_ws_bg'] + '}%{F' + self.__colors['focused_ws_fg'] + '}%{T3}%{U' + self.__colors['focused_ws_fg'] + '}%{+u} %{A:CMDws' + w[1] + ':}' + '\uF111' + '%{A} %{-u}%{U-}%{T-}%{B-}%{F-}'
+                else:
+                    output += '%{B' + self.__colors['focused_ws_bg'] + '}%{F' + self.__colors['focused_ws_fg'] + '}%{T3} %{A:CMDws' + w[1] + ':}' + '\uF111' + '%{A} %{T-}%{B-}%{F-}'
             elif w[0] == 'f':
                 output += '%{B' + self.__colors['unfocused_ws_bg'] + '}%{F' + self.__colors['unfocused_ws_fg'] + '}%{T3} %{A:CMDws' + w[1] + ':}' + '\uF10C' + '%{A} %{T-}%{B-}%{F-}'
             elif w[0] == 'F':
-                output += '%{B' + self.__colors['focused_ws_bg'] + '}%{F' + self.__colors['focused_ws_fg'] + '}%{T3} %{A:CMDws' + w[1] + ':}' + '\uF10C' + '%{A} %{T-}%{B-}%{F-}'
+                if self.__colors['focused_ws_underlined'] == 'True':
+                    output += '%{B' + self.__colors['focused_ws_bg'] + '}%{F' + self.__colors['focused_ws_fg'] + '}%{T3}%{U' + self.__colors['focused_ws_fg'] + '}%{+u} %{A:CMDws' + w[1] + ':}' + '\uF10C' + '%{A} %{-u}%{T-}%{B-}%{F-}'
+                else:
+                    output += '%{B' + self.__colors['focused_ws_bg'] + '}%{F' + self.__colors['focused_ws_fg'] + '}%{T3} %{A:CMDws' + w[1] + ':}' + '\uF10C' + '%{A} %{T-}%{B-}%{F-}'
         return output
 
     """
