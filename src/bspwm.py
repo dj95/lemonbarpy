@@ -7,6 +7,7 @@
 
 import gi
 import os
+import re
 import sys
 import json
 import select
@@ -52,6 +53,8 @@ class BSPWM(object):
         self.status = {'date':'', 'spotify':'', 'vol':'', 'wlan':'', 'eth':'', 'vpn':'', 'bat':''}
         self.workspaces = ''
         self.title = ''
+        self.current_power = ''
+        self.old_power = ''
         
         # Status toggles
         self.__show_eth = False
@@ -126,11 +129,18 @@ class BSPWM(object):
                     self.status = self.generate_status(stats)
                     self.status['spotify'] = utils
 
+                    # If changing to battery or starting on battery, display the battery status
+                    if self.current_power != self.old_power and self.current_power == 'BAT':
+                        self.__show_battery = True
+                    if self.current_power != self.old_power and self.current_power == 'CHR':
+                        self.__show_battery = False
+                    self.old_power = self.current_power
+
                     # Write into stdin of lemonbar
                     line = self.generate_line(self.workspaces, self.status, self.title) 
                     self.write_into_lemonbar(line)
                     continue
-                elif ws.startswith('UTILS'): # Uitls like spotify
+                elif ws.startswith('UTILS'): # Utils like spotify
                     ws = ws[5:]
                     self.__spotify = ws
                     if ws == 'None':
@@ -247,7 +257,7 @@ class BSPWM(object):
         for ws in workspaces:
             if ws['focused']:
                 if self.__colors['focused_ws_underlined'] == 'True':
-                    output += '%{B' + self.__colors['focused_ws_bg'] + '}%{F' + self.__colors['focused_ws_fg'] + '}%{T3}%{U' + self.__colors['focused_ws_fg'] + '}%{+u} %{A:CMDws' + ws['name'] + ':}' + '\uF111' + '%{A} %{-u}%{U-}{T-}%{B-}%{F-}'
+                    output += '%{B' + self.__colors['focused_ws_bg'] + '}%{F' + self.__colors['focused_ws_fg'] + '}%{T3}%{U' + self.__colors['focused_ws_fg'] + '}%{+u} %{A:CMDws' + ws['name'] + ':}' + '\uF111' + '%{A} %{-u}%{U-}%{T-}%{B-}%{F-}'
                 else:
                     output += '%{B' + self.__colors['focused_ws_bg'] + '}%{F' + self.__colors['focused_ws_fg'] + '}%{T3} %{A:CMDws' + ws['name'] + ':}' + '\uF111' + '%{A} %{T-}%{B-}%{F-}'
             else:
@@ -294,6 +304,14 @@ class BSPWM(object):
     """
     def generate_status(self, state):
         self.__state = state 
+
+        date = ''
+        volume = ''
+        wlan = ''
+        eth = ''
+        battery = ''
+        vpn = ''
+
         for s in state:
             # Volume
             if s.startswith('VOL'):
@@ -363,9 +381,15 @@ class BSPWM(object):
             # Battery
             elif s.startswith('BATT'):
                 s = s[4:]
+                # If discharging, display the battery status
+                self.current_power = re.sub(r'([BATUNKFLCHR]*)\s.*', r'\1', s)
+
                 # If battery is not charging
                 if self.__show_battery: # Display battery stats
                     if s.startswith('BAT') or s.startswith('UNK') or s.startswith('FLL'):
+                        on_battery = False
+                        if s.startswith('BAT'):
+                            on_battery = True
                         percent = int(s.split(' ')[1].split(',')[0])
                         s = s.lstrip('BAT ')
                         s = s.lstrip('UNK ')
@@ -379,6 +403,21 @@ class BSPWM(object):
                             battery = ' %{F' + self.__colors['status_icon_fg'] + '}%{A:CMDbat:}%{F' + self.__colors['status_fg'] + '} ' + s + '%{A}  '
                         elif percent <= 30:
                             battery = ' %{F' + self.__colors['status_alarm_fg'] + '}%{A:CMDbat:}%{F' + self.__colors['status_alarm_fg'] + '} ' + s + '%{A}  '
+
+                        # Show watt usage when in battery mode
+                        if on_battery:
+                            with open('/sys/class/power_supply/BAT0/power_now', 'r') as fp:
+                                watt = fp.read()
+                                watt = re.sub('\.', ',', str(int(watt.rstrip('\n')) / 1000000)[0:4] + 'W')
+                            #  Change icon related to the actual battery load
+                            if percent > 80:
+                                battery = ' %{F' + self.__colors['status_icon_fg'] + '}%{A:CMDbat:}%{F' + self.__colors['status_fg'] + '} ' + s + ' ' + watt + '%{A}  '
+                            elif percent <= 80 and percent > 50:
+                                battery = ' %{F' + self.__colors['status_icon_fg'] + '}%{A:CMDbat:}%{F' + self.__colors['status_fg'] + '} ' + s + ' ' + watt + '%{A}  '
+                            elif percent <= 50 and percent > 30:
+                                battery = ' %{F' + self.__colors['status_icon_fg'] + '}%{A:CMDbat:}%{F' + self.__colors['status_fg'] + '} ' + s + ' ' + watt + '%{A}  '
+                            elif percent <= 30:
+                                battery = ' %{F' + self.__colors['status_alarm_fg'] + '}%{A:CMDbat:}%{F' + self.__colors['status_alarm_fg'] + '} ' + s + ' ' + watt + '%{A}  '
                     elif s.startswith('CHR'): # If it charges, change icon
                         s = s.lstrip('CHR ')
                         battery = ' %{F' + self.__colors['status_icon_fg'] + '}%{A:CMDbat:}%{F' + self.__colors['status_fg'] + '} ' + s + '%{A}  '

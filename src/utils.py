@@ -5,6 +5,7 @@
 # (c) 2016 Daniel Jankowski
 
 
+import os
 import sys
 import dbus
 import time
@@ -63,9 +64,16 @@ class KeyboardThread(Thread):
 
         self.stop_event = Event()
 
-        self.__socket = socket.socket(socket.AF_UNIX, socket.SOCK_RAW)
-        self.__socket.bind('/dev/shm/lemonbarpy.socket')
-        self.__socket.settimeout(0.1)
+        try:
+            self.__socket = socket.socket(socket.AF_UNIX, socket.SOCK_RAW)
+            self.__socket.bind('/dev/shm/lemonbarpy.socket')
+            self.__socket.settimeout(0.1)
+        except Exception as e: # If this doesnt work, remove existing
+            os.remove('/dev/shm/lemonbarpy.socket')
+            self.__socket = socket.socket(socket.AF_UNIX, socket.SOCK_RAW)
+            self.__socket.bind('/dev/shm/lemonbarpy.socket')
+            self.__socket.settimeout(0.1)
+
 
     def run(self):
         last_playing = ''

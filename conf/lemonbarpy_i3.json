@@ -2,7 +2,7 @@
     "wm":"i3",
     "focused_ws_fg":"#BDBDBD",
     "focused_ws_bg":"#00000000",
-    "focused_ws_underlined":"True",
+    "focused_ws_underlined":"False",
     "unfocused_ws_fg":"#80BDBDBD",
     "unfocused_ws_bg":"#00000000",
     "urgent_ws_fg":"#FF34322E",
